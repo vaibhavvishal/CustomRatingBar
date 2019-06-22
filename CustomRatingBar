@@ -1,0 +1,259 @@
+import android.content.Context;
+import android.content.res.TypedArray;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.LayerDrawable;
+import android.support.annotation.Nullable;
+import android.util.AttributeSet;
+import android.util.TypedValue;
+import android.view.MotionEvent;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+
+import com.til.etimes.common.application.ETimesApplication;
+
+//import <add import for R file here>;
+
+// Supports only Horizontal Rating
+public class CustomRatingBar extends LinearLayout {
+    private final static int Default_id = R.drawable.ic_rate_star_red; // default drawable - add in your app
+    private final static int DEFAULT_NUM_STARS = 5;
+    private final static float DEFAULT_STEP_SIZE = 1f;
+    private final static int STAR_SIZE_DP = 10;
+
+    private Context mContext;
+    private int mNumOfStars = DEFAULT_NUM_STARS;
+    private Drawable mProgressDrawable, mBackgroundDrawable, mSecondaryDrawable, mCurrentDrawable;
+    private int mMin;
+    private int mMax;
+    private int mCurrProgress;
+    private boolean mIsIndicator = true;
+
+    private int mStarWidth;
+    private float mLastX;
+    private int mStarSizePx;
+
+    public CustomRatingBar(Context context) {
+        super(context);
+        mContext = context;
+        init(null);
+    }
+
+    public CustomRatingBar(Context context, @Nullable AttributeSet attrs) {
+        super(context, attrs);
+        mContext = context;
+        init(attrs);
+    }
+
+    public CustomRatingBar(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
+        mContext = context;
+        init(attrs);
+    }
+
+    public CustomRatingBar(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+        super(context, attrs, defStyleAttr, defStyleRes);
+        mContext = context;
+        init(attrs);
+    }
+
+    private void init(AttributeSet attrs) {
+        float stepSize = DEFAULT_STEP_SIZE;
+        float rating = 0.0f;
+        mStarSizePx = convertDPToPixels(STAR_SIZE_DP, mContext);
+        if (attrs != null) {
+            TypedArray typedArray = getContext().obtainStyledAttributes(attrs,
+                    R.styleable.CustomRatingBar, 0, 0);
+            mNumOfStars = typedArray.getInteger(R.styleable.CustomRatingBar_numOfStars, DEFAULT_NUM_STARS);
+            stepSize = typedArray.getFloat(R.styleable.CustomRatingBar_stepSize, DEFAULT_STEP_SIZE);
+            rating = typedArray.getFloat(R.styleable.CustomRatingBar_rating, 0);
+            mProgressDrawable = typedArray.getDrawable(R.styleable.CustomRatingBar_progressDrawable);
+            mIsIndicator = typedArray.getBoolean(R.styleable.CustomRatingBar_isIndicator, false);
+
+            typedArray.recycle();
+        }
+
+        if (mProgressDrawable != null) {
+            if (mProgressDrawable instanceof LayerDrawable) {
+                LayerDrawable background = (LayerDrawable) mProgressDrawable;
+                final int N = background.getNumberOfLayers();
+                for (int i = 0; i < N; i++) {
+                    int id = background.getId(i);
+                    if (id == android.R.id.background) {
+                        mBackgroundDrawable = background.getDrawable(i);
+                    } else if (id == android.R.id.secondaryProgress) {
+                        mSecondaryDrawable = background.getDrawable(i);
+                    } else if (id == android.R.id.progress) {
+                        mCurrentDrawable = background.getDrawable(i);
+                    }
+                }
+            } else {
+                mCurrentDrawable = mProgressDrawable;
+            }
+        } else {
+            mCurrentDrawable = mContext.getDrawable(Default_id);
+        }
+
+        if (stepSize >= 0) {
+            setStepSize(stepSize);
+        } else {
+            setStepSize(0.5f);
+        }
+
+        setRating(rating);
+    }
+
+    public void setProgressDrawable(Drawable drawable) {
+        mProgressDrawable = drawable;
+        mCurrentDrawable = mProgressDrawable;
+    }
+
+    public int getNumOfStars() {
+        return mNumOfStars;
+    }
+
+    public void setNumOfStars(int mNumOfStars) {
+        float stepSize = getStepSize();
+        this.mNumOfStars = mNumOfStars;
+        setStepSize(stepSize);
+        setRating(mCurrProgress);
+    }
+
+    private void setProgress() {
+        int count = 0;
+        float rating = mCurrProgress;
+        while (rating >= getProgressPerStar() && count < mNumOfStars) {
+            addView(count, mCurrentDrawable);
+            rating -= getProgressPerStar();
+            count++;
+        }
+
+        if (rating > mMin && count < mNumOfStars) {
+            addView(count, mSecondaryDrawable);
+            count++;
+        }
+
+        while (count < mNumOfStars) {
+            addView(count, mBackgroundDrawable);
+            count++;
+        }
+    }
+
+    private void addView(int pos, Drawable drawable) {
+        if (drawable == null) {
+            return;
+        }
+        ImageView iv = (ImageView) getChildAt(pos);
+        if (iv == null) {
+            iv = new ImageView(mContext);
+            iv.setImageDrawable(drawable);
+            addView(iv);
+            LinearLayout.LayoutParams params = (LayoutParams) iv.getLayoutParams();
+            if (params != null) {
+                params.width = mStarSizePx;
+                params.height = mStarSizePx;
+                iv.setLayoutParams(params);
+            }
+        } else {
+            iv.setImageDrawable(drawable);
+        }
+        if (mStarWidth == 0) {
+            mStarWidth = drawable.getIntrinsicWidth();
+        }
+    }
+
+    /**
+     * Gets the current rating (number of stars filled).
+     *
+     * @return The current rating.
+     */
+    public float getRating() {
+        return mCurrProgress / getProgressPerStar();
+    }
+
+    /**
+     * Sets the rating (the number of stars filled).
+     *
+     * @param rating The rating to set.
+     */
+    public void setRating(float rating) {
+        mCurrProgress = Math.round(rating * getProgressPerStar());
+        if (mCurrProgress > mMax) {
+            mCurrProgress = mMax;
+        }
+        setProgress();
+    }
+
+    /**
+     * Gets the step size of this rating bar.
+     *
+     * @return The step size.
+     */
+    public float getStepSize() {
+        return (float) mNumOfStars / mMax;
+    }
+    
+    public void setStepSize(float stepSize) {
+        if (stepSize <= 0) {
+            return;
+        }
+
+        final float newMax = mNumOfStars / stepSize;
+        final int newProgress = (int) (newMax / mMax * mCurrProgress);
+        mMax = (int) newMax;
+        mCurrProgress = newProgress;
+    }
+
+    /**
+     * @return The amount of progress that fits into a star
+     */
+    private float getProgressPerStar() {
+        if (mNumOfStars > 0) {
+            return 1f * mMax / mNumOfStars;
+        } else {
+            return 1;
+        }
+    }
+
+    private float calculateRating(float pos_x) {
+        int width_rating_bar = getWidth();
+        int width_single_star = width_rating_bar / mNumOfStars; // should be equal to mStarWidth
+        float rating = 0;
+        while (pos_x >= width_single_star && pos_x > 0) {
+            pos_x -= width_single_star;
+            rating++;
+        }
+        float rem = pos_x / width_single_star;
+        rating += rem;
+        return rating;
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event) {
+        if (mIsIndicator) {
+            return true;
+        }
+        switch (event.getAction()) {
+            case MotionEvent.ACTION_DOWN:
+                mLastX = event.getX();
+                break;
+            case MotionEvent.ACTION_MOVE:
+                setRating(calculateRating(event.getX()));
+                break;
+            case MotionEvent.ACTION_UP:
+                break;
+        }
+        return true;
+    }
+
+    public boolean isIsIndicator() {
+        return mIsIndicator;
+    }
+
+    public void setIsIndicator(boolean mIsIndicator) {
+        this.mIsIndicator = mIsIndicator;
+    }
+
+    public static int convertDPToPixels(int dps, Context context) {
+        return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dps, ETimesApplication.getAppContext().getResources().getDisplayMetrics());
+    }
+}
